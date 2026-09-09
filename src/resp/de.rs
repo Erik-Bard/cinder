@@ -10,6 +10,11 @@ impl RespValue {
         }
         Ok(value)
     }
+    
+    pub fn deserialize_prefix(input: &[u8]) -> Result<(RespValue, usize), RespError> {
+        let (value, rest) = parse_value(input)?;
+        Ok((value, input.len() - rest.len()))
+    }
 }
 
 enum Length {
@@ -474,5 +479,33 @@ mod tests {
     #[test]
     fn empty_input_is_an_error() {
         assert_deserialize_fails(b"", RespError::UnexpectedEof);
+    }
+
+    #[test]
+    fn deserialize_prefix_leaves_trailing_bytes_unconsumed() {
+        let (value, consumed) =
+            RespValue::deserialize_prefix(b"+OK\r\n+OK\r\n").expect("expected a parsed value");
+        assert_eq!(value, RespValue::Simple(SimpleValue::SimpleString(b"OK".to_vec())));
+        assert_eq!(consumed, 5);
+    }
+
+    #[test]
+    fn deserialize_prefix_reports_incomplete_input_as_unexpected_eof() {
+        let err = RespValue::deserialize_prefix(b"*1\r\n$4\r\nPI")
+            .expect_err("expected a partial command to fail");
+        assert_eq!(err, RespError::UnexpectedEof);
+    }
+
+    #[test]
+    fn deserialize_prefix_consumes_a_full_pipelined_command() {
+        let (value, consumed) = RespValue::deserialize_prefix(b"*1\r\n$4\r\nping\r\n*1\r\n$4\r\nping\r\n")
+            .expect("expected a parsed value");
+        assert_eq!(
+            value,
+            RespValue::Aggregate(AggregateValue::Array(vec![RespValue::Aggregate(
+                AggregateValue::BulkString(b"ping".to_vec())
+            )]))
+        );
+        assert_eq!(consumed, 14);
     }
 }
