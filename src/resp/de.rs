@@ -15,6 +15,18 @@ impl RespValue {
         let (value, rest) = parse_value(input)?;
         Ok((value, input.len() - rest.len()))
     }
+    
+    pub fn next_frame(buffer: &[u8]) -> Result<Option<(RespValue, usize)>, RespError> {
+        if buffer.is_empty() {
+            return Ok(None);
+        }
+
+        match RespValue::deserialize_prefix(buffer) {
+            Ok((value, consumed)) => Ok(Some((value, consumed))),
+            Err(RespError::UnexpectedEof) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
 }
 
 enum Length {
@@ -507,5 +519,23 @@ mod tests {
             )]))
         );
         assert_eq!(consumed, 14);
+    }
+
+    #[test]
+    fn next_frame_waits_for_more_bytes_on_an_empty_buffer() {
+        assert_eq!(RespValue::next_frame(b""), Ok(None));
+    }
+
+    #[test]
+    fn next_frame_waits_for_more_bytes_on_a_partial_value() {
+        assert_eq!(RespValue::next_frame(b"*1\r\n$4\r\nPI"), Ok(None));
+    }
+
+    #[test]
+    fn next_frame_reports_genuine_protocol_errors() {
+        assert_eq!(
+            RespValue::next_frame(b"^nope\r\n"),
+            Err(RespError::UnknownType(b'^'))
+        );
     }
 }

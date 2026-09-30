@@ -2,6 +2,7 @@
 name = "cinder"
 version = "0.1.0"
 edition = "2024"
+default-run = "cinder"
 authors = ["Erik Bard"]
 description = "Light, small but fast redis server."
 readme = "README.md"

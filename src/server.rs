@@ -2,10 +2,8 @@ use std::io;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use crate::commands;
-use crate::resp::{RespError, RespValue, SimpleValue};
+use crate::resp::{READ_CHUNK_SIZE, RespValue, SimpleValue};
 use crate::store::{Store, new_store};
-
-const READ_CHUNK_SIZE: usize = 4096;
 
 pub async fn run(addr: &str) -> io::Result<()> {
     let listener = TcpListener::bind(addr).await?;
@@ -29,7 +27,7 @@ async fn handle_connection(mut stream: TcpStream, store: Store) -> io::Result<()
 
     loop {
         loop {
-            match next_frame(&buffer) {
+            match RespValue::next_frame(&buffer) {
                 Ok(Some((request, consumed))) => {
                     let response = commands::dispatch(&request, &store);
                     stream.write_all(&response.serialize()).await?;
@@ -54,35 +52,13 @@ async fn handle_connection(mut stream: TcpStream, store: Store) -> io::Result<()
     }
 }
 
-fn next_frame(buffer: &[u8]) -> Result<Option<(RespValue, usize)>, RespError> {
-    if buffer.is_empty() {
-        return Ok(None);
-    }
-
-    match RespValue::deserialize_prefix(buffer) {
-        Ok((value, consumed)) => Ok(Some((value, consumed))),
-        Err(RespError::UnexpectedEof) => Ok(None),
-        Err(err) => Err(err),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn next_frame_waits_for_more_bytes_on_an_empty_buffer() {
-        assert_eq!(next_frame(b""), Ok(None));
-    }
-
-    #[test]
-    fn next_frame_waits_for_more_bytes_on_a_partial_command() {
-        assert_eq!(next_frame(b"*1\r\n$4\r\nPI"), Ok(None));
-    }
-
-    #[test]
     fn next_frame_returns_a_complete_command_and_its_length() {
-        let (value, consumed) = next_frame(b"*1\r\n$4\r\nping\r\n")
+        let (value, consumed) = RespValue::next_frame(b"*1\r\n$4\r\nping\r\n")
             .expect("expected parsing to succeed")
             .expect("expected a complete command");
         assert_eq!(consumed, 14);
@@ -91,12 +67,6 @@ mod tests {
             commands::dispatch(&value, &store),
             RespValue::Simple(SimpleValue::SimpleString(b"PONG".to_vec()))
         );
-    }
-
-    #[test]
-    fn next_frame_reports_genuine_protocol_errors() {
-        let err = next_frame(b"^nope\r\n").expect_err("expected a protocol error");
-        assert_eq!(err, RespError::UnknownType(b'^'));
     }
 
     #[tokio::test]
@@ -143,9 +113,6 @@ mod tests {
         let addr = listener.local_addr().expect("expected a local address");
         let store = new_store();
 
-        // A small accept loop, unlike the single-shot one above, since this
-        // test needs two independent client connections that nonetheless
-        // share the same underlying map.
         let accept_store = store.clone();
         tokio::spawn(async move {
             loop {
@@ -189,8 +156,6 @@ mod tests {
             send_and_read(addr, b"*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n", 5).await;
         assert_eq!(set_reply, b"+OK\r\n");
 
-        // A brand new connection, sharing only the store (not the socket or
-        // the read buffer of the first one), should still see the value.
         let get_reply = send_and_read(addr, b"*2\r\n$3\r\nGET\r\n$3\r\nfoo\r\n", 9).await;
         assert_eq!(get_reply, b"$3\r\nbar\r\n");
     }

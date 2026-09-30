@@ -132,4 +132,17 @@ mod tests {
     fn canonical_null_round_trips() {
         assert_round_trips(b"_\r\n");
     }
+
+    #[test]
+    fn ping_command_serializes_to_resp_array() {
+        assert_eq!(RespValue::command(&["PING"]).serialize(), b"*1\r\n$4\r\nPING\r\n");
+    }
+
+    #[test]
+    fn multi_word_command_serializes_each_word_as_bulk_string() {
+        assert_eq!(
+            RespValue::command(&["SET", "key", "value"]).serialize(),
+            b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n"
+        );
+    }
 }

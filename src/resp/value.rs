@@ -32,3 +32,15 @@ pub enum AggregateValue {
     Set(Vec<RespValue>),
     Push(Vec<RespValue>),
 }
+
+impl RespValue {
+    /// Builds a Redis command: an array of bulk strings, one per word.
+    /// Example: `["SET", "key", "value"]`
+    pub fn command(words: &[&str]) -> RespValue {
+        let parts = words
+            .iter()
+            .map(|word| RespValue::Aggregate(AggregateValue::BulkString(word.as_bytes().to_vec())))
+            .collect();
+        RespValue::Aggregate(AggregateValue::Array(parts))
+    }
+}

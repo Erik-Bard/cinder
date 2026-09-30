@@ -7,3 +7,5 @@ mod value;
 pub use error::RespError;
 pub use tag::{AggregateType, RespCategory, RespType, RespVersion, SimpleType};
 pub use value::{AggregateValue, RespValue, SimpleValue};
+
+pub const READ_CHUNK_SIZE: usize = 4096;

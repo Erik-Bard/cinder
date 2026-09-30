@@ -92,15 +92,6 @@ mod tests {
     use super::*;
     use crate::store::new_store;
 
-    fn command(parts: &[&str]) -> RespValue {
-        RespValue::Aggregate(AggregateValue::Array(
-            parts
-                .iter()
-                .map(|p| RespValue::Aggregate(AggregateValue::BulkString(p.as_bytes().to_vec())))
-                .collect(),
-        ))
-    }
-
     fn assert_error(reply: &RespValue) {
         assert!(
             matches!(reply, RespValue::Simple(SimpleValue::Error(_))),
@@ -111,20 +102,20 @@ mod tests {
     #[test]
     fn ping_without_args_replies_pong() {
         let store = new_store();
-        assert_eq!(dispatch(&command(&["PING"]), &store), simple_string("PONG"));
+        assert_eq!(dispatch(&RespValue::command(&["PING"]), &store), simple_string("PONG"));
     }
 
     #[test]
     fn ping_is_case_insensitive() {
         let store = new_store();
-        assert_eq!(dispatch(&command(&["ping"]), &store), simple_string("PONG"));
+        assert_eq!(dispatch(&RespValue::command(&["ping"]), &store), simple_string("PONG"));
     }
 
     #[test]
     fn ping_with_message_echoes_it_back() {
         let store = new_store();
         assert_eq!(
-            dispatch(&command(&["PING", "hello"]), &store),
+            dispatch(&RespValue::command(&["PING", "hello"]), &store),
             bulk_string(b"hello".to_vec())
         );
     }
@@ -132,14 +123,14 @@ mod tests {
     #[test]
     fn ping_with_too_many_args_is_an_error() {
         let store = new_store();
-        assert_error(&dispatch(&command(&["PING", "a", "b"]), &store));
+        assert_error(&dispatch(&RespValue::command(&["PING", "a", "b"]), &store));
     }
 
     #[test]
     fn echo_replies_with_the_message() {
         let store = new_store();
         assert_eq!(
-            dispatch(&command(&["ECHO", "Hello World"]), &store),
+            dispatch(&RespValue::command(&["ECHO", "Hello World"]), &store),
             bulk_string(b"Hello World".to_vec())
         );
     }
@@ -147,19 +138,19 @@ mod tests {
     #[test]
     fn echo_without_args_is_an_error() {
         let store = new_store();
-        assert_error(&dispatch(&command(&["ECHO"]), &store));
+        assert_error(&dispatch(&RespValue::command(&["ECHO"]), &store));
     }
 
     #[test]
     fn echo_with_too_many_args_is_an_error() {
         let store = new_store();
-        assert_error(&dispatch(&command(&["ECHO", "a", "b"]), &store));
+        assert_error(&dispatch(&RespValue::command(&["ECHO", "a", "b"]), &store));
     }
 
     #[test]
     fn unknown_command_is_an_error() {
         let store = new_store();
-        assert_error(&dispatch(&command(&["FLURB"]), &store));
+        assert_error(&dispatch(&RespValue::command(&["FLURB"]), &store));
     }
 
     #[test]
@@ -175,11 +166,11 @@ mod tests {
     fn set_then_get_returns_the_stored_value() {
         let store = new_store();
         assert_eq!(
-            dispatch(&command(&["SET", "key", "value"]), &store),
+            dispatch(&RespValue::command(&["SET", "key", "value"]), &store),
             simple_string("OK")
         );
         assert_eq!(
-            dispatch(&command(&["GET", "key"]), &store),
+            dispatch(&RespValue::command(&["GET", "key"]), &store),
             bulk_string(b"value".to_vec())
         );
     }
@@ -188,7 +179,7 @@ mod tests {
     fn set_is_case_insensitive_like_every_other_command() {
         let store = new_store();
         assert_eq!(
-            dispatch(&command(&["set", "key", "value"]), &store),
+            dispatch(&RespValue::command(&["set", "key", "value"]), &store),
             simple_string("OK")
         );
     }
@@ -196,10 +187,10 @@ mod tests {
     #[test]
     fn set_overwrites_an_existing_value() {
         let store = new_store();
-        dispatch(&command(&["SET", "key", "first"]), &store);
-        dispatch(&command(&["SET", "key", "second"]), &store);
+        dispatch(&RespValue::command(&["SET", "key", "first"]), &store);
+        dispatch(&RespValue::command(&["SET", "key", "second"]), &store);
         assert_eq!(
-            dispatch(&command(&["GET", "key"]), &store),
+            dispatch(&RespValue::command(&["GET", "key"]), &store),
             bulk_string(b"second".to_vec())
         );
     }
@@ -208,7 +199,7 @@ mod tests {
     fn get_on_a_missing_key_returns_null() {
         let store = new_store();
         assert_eq!(
-            dispatch(&command(&["GET", "missing"]), &store),
+            dispatch(&RespValue::command(&["GET", "missing"]), &store),
             RespValue::Simple(SimpleValue::Null)
         );
     }
@@ -216,14 +207,14 @@ mod tests {
     #[test]
     fn different_keys_do_not_collide() {
         let store = new_store();
-        dispatch(&command(&["SET", "a", "1"]), &store);
-        dispatch(&command(&["SET", "b", "2"]), &store);
+        dispatch(&RespValue::command(&["SET", "a", "1"]), &store);
+        dispatch(&RespValue::command(&["SET", "b", "2"]), &store);
         assert_eq!(
-            dispatch(&command(&["GET", "a"]), &store),
+            dispatch(&RespValue::command(&["GET", "a"]), &store),
             bulk_string(b"1".to_vec())
         );
         assert_eq!(
-            dispatch(&command(&["GET", "b"]), &store),
+            dispatch(&RespValue::command(&["GET", "b"]), &store),
             bulk_string(b"2".to_vec())
         );
     }
@@ -231,20 +222,20 @@ mod tests {
     #[test]
     fn set_with_no_args_is_an_error() {
         let store = new_store();
-        assert_error(&dispatch(&command(&["SET"]), &store));
+        assert_error(&dispatch(&RespValue::command(&["SET"]), &store));
     }
 
     #[test]
     fn set_with_only_a_key_is_an_error() {
         let store = new_store();
-        assert_error(&dispatch(&command(&["SET", "key"]), &store));
+        assert_error(&dispatch(&RespValue::command(&["SET", "key"]), &store));
     }
 
     #[test]
     fn set_with_too_many_args_is_an_error() {
         let store = new_store();
         assert_error(&dispatch(
-            &command(&["SET", "key", "value", "extra"]),
+            &RespValue::command(&["SET", "key", "value", "extra"]),
             &store,
         ));
     }
@@ -252,12 +243,12 @@ mod tests {
     #[test]
     fn get_with_no_args_is_an_error() {
         let store = new_store();
-        assert_error(&dispatch(&command(&["GET"]), &store));
+        assert_error(&dispatch(&RespValue::command(&["GET"]), &store));
     }
 
     #[test]
     fn get_with_too_many_args_is_an_error() {
         let store = new_store();
-        assert_error(&dispatch(&command(&["GET", "a", "b"]), &store));
+        assert_error(&dispatch(&RespValue::command(&["GET", "a", "b"]), &store));
     }
 }
